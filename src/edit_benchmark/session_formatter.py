@@ -166,13 +166,18 @@ def format_session(session_path: Path) -> str:
     return "\n".join(output)
 
 
-def _summarize_args(tool_name: str, args: dict[str, Any]) -> str:
+def _summarize_args(tool_name: str, args: Any) -> str:
     """Extract key arguments for display."""
+    if not isinstance(args, dict):
+        return ""
     if tool_name == "read":
         return f"`{args.get('path', '?')}`"
     elif tool_name == "edit":
         edits = args.get("edits", [])
-        ops = [e.get("op", "?") for e in edits]
+        if isinstance(edits, list):
+            ops = [e.get("op", "?") for e in edits if isinstance(e, dict)]
+        else:
+            ops = []
         return f"`{args.get('path', '?')}` ({', '.join(ops)})"
     elif tool_name == "bash":
         cmd = args.get("command", "")

@@ -5,6 +5,7 @@ import subprocess
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from .session_parser import parse_session, SessionMetrics
 from .validator import load_assertions, validate_step, ValidationResult
@@ -24,6 +25,7 @@ class RunResult:
     passed: bool
     steps: list[StepResult] = field(default_factory=list)
     metrics: SessionMetrics | None = None
+    review: Any = None  # ReviewResult, set externally after formatting
 
 
 @dataclass

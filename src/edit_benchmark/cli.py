@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 
 from .runner import run_group, GroupResult
+from .session_formatter import format_session
+from .reviewer import review_session, ReviewResult
 
 
 def find_extensions(ext_dir: Path) -> list[Path]:
@@ -53,7 +55,9 @@ def print_result(result: GroupResult, verbose: bool = False) -> None:
                 if s.failures:
                     for failure in s.failures:
                         print(f"        FAIL: {failure}")
-
+            if run.review:
+                rv = run.review
+                print(f"    review: edits={rv.total_edits} correct={rv.correct_edits} rejected={rv.rejected_edits} warned={rv.warned_edits} wrong={rv.wrong_edits} friction=\"{rv.biggest_friction}\"")
 
 def generate_json_report(
     results: list[GroupResult],
@@ -85,6 +89,7 @@ def generate_json_report(
             run_entry = {
                 "passed": run.passed,
                 "metrics": run.metrics.summary() if run.metrics else None,
+                "review": run.review.summary() if run.review else None,
                 "steps": [
                     {
                         "name": s.step_name,
@@ -146,6 +151,11 @@ def main() -> None:
         "--json-report",
         help="Write JSON report to this file",
     )
+    parser.add_argument(
+        "--review",
+        action="store_true",
+        help="Run AI reviewer on each completed run after benchmark",
+    )
     args = parser.parse_args()
 
     project_root = Path.cwd()
@@ -199,6 +209,21 @@ def main() -> None:
                 model=args.model,
             )
             all_results.append(result)
+
+            # Review session if requested
+            if args.review:
+                for run in result.runs:
+                    if run.metrics is not None and not run.metrics.is_empty:
+                        ses_path = (workspace_base
+                            / f"{group_dir.name}-{schema_name}"
+                            / f"run-{result.runs.index(run)+1}"
+                            / ".bench-session.jsonl")
+                        if ses_path.exists():
+                            md = format_session(ses_path)
+                            run.review = review_session(
+                                md, model=args.model, timeout=120
+                            )
+
             print_result(result, verbose=args.verbose)
 
     # Summary
