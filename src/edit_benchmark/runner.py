@@ -2,6 +2,7 @@
 
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -18,31 +19,43 @@ class StepResult:
 
 
 @dataclass
-class GroupResult:
-    group_name: str
-    schema_name: str
+class RunResult:
+    """Result of a single run (all steps) of a group."""
+    passed: bool
     steps: list[StepResult] = field(default_factory=list)
     metrics: SessionMetrics | None = None
 
-    @property
-    def passed(self) -> bool:
-        return all(s.passed for s in self.steps)
+
+@dataclass
+class GroupResult:
+    group_name: str
+    schema_name: str
+    runs_completed: int = 0
+    runs_total: int = 0
+    runs: list[RunResult] = field(default_factory=list)
+    metrics_avg: SessionMetrics | None = None
 
     @property
-    def total_attempts(self) -> int:
-        return sum(s.attempts for s in self.steps)
+    def passed(self) -> bool:
+        return self.runs_completed > 0 and all(r.passed for r in self.runs)
 
     @property
     def cost_score(self) -> int:
-        return self.metrics.cost_score if self.metrics else 0
+        if not self.runs:
+            return 0
+        return sum(r.metrics.cost_score for r in self.runs if r.metrics) // len(self.runs)
 
     @property
-    def total_turns(self) -> int:
-        return self.metrics.turn_count if self.metrics else 0
+    def total_turns(self) -> float:
+        if not self.runs:
+            return 0.0
+        return sum(r.metrics.turn_count for r in self.runs if r.metrics) / len(self.runs)
 
     @property
     def context_tokens(self) -> int:
-        return self.metrics.context_tokens if self.metrics else 0
+        if not self.runs:
+            return 0
+        return sum(r.metrics.context_tokens for r in self.runs if r.metrics) // len(self.runs)
 
 
 def run_pi(
@@ -79,9 +92,13 @@ def run_step(
     step_dir: Path,
     extension_path: Path,
     session_path: Path,
-    max_retries: int = 3,
-) -> StepResult:
-    """Run a single edit step with retries using a shared session file."""
+    deadline: float,
+) -> StepResult | None:
+    """Run a single edit step, retrying until pass or deadline expires.
+
+    Returns None if the step could not complete (timeout during pi call
+    or deadline expired). Returns StepResult otherwise.
+    """
     step_name = step_dir.name
 
     instruction_path = step_dir / "instruction.md"
@@ -107,24 +124,24 @@ def run_step(
             failures=[f"YAML parse error in {validate_path}: {e}"],
         )
 
-    for attempt in range(1, max_retries + 1):
+    attempt = 0
+    while True:
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            return None  # deadline expired, abort this run
+
+        attempt += 1
         process = run_pi(
             prompt=prompt,
             extension_path=extension_path,
             session_path=session_path,
             cwd=workspace,
+            timeout=max(1, int(remaining)),
         )
 
         if process is None:
-            if attempt < max_retries:
-                prompt = "The previous attempt timed out. Please try again with a simpler approach."
-                continue
-            return StepResult(
-                step_name=step_name,
-                passed=False,
-                attempts=max_retries,
-                failures=["Timeout — all retries exhausted"],
-            )
+            # pi call timed out (used all remaining time)
+            return None
 
         try:
             validation = validate_step(workspace, assertions)
@@ -141,47 +158,24 @@ def run_step(
                 attempts=attempt,
             )
 
-        if attempt < max_retries:
-            error_text = "\n".join(validation.failures)
-            prompt = (
-                f"The edit didn't pass validation. Issues found:\n"
-                f"{error_text}\n\n"
-                f"Please fix these issues."
-            )
-
-    return StepResult(
-        step_name=step_name,
-        passed=False,
-        attempts=max_retries,
-        failures=validation.failures,
-    )
+        # Retry with feedback
+        error_text = "\n".join(validation.failures)
+        prompt = (
+            f"The edit didn't pass validation. Issues found:\n"
+            f"{error_text}\n\n"
+            f"Please fix these issues."
+        )
 
 
-def run_group(
-    workspace_base: Path,
+def run_single(
+    workspace: Path,
     group_dir: Path,
     extension_path: Path,
-    max_retries: int = 3,
-) -> GroupResult:
-    """Run a full test group (all steps) with one schema extension.
-
-    All steps share the same workspace and session file. Metrics are
-    parsed once from the final session.
-    """
-    group_name = group_dir.name
-    schema_name = extension_path.parent.name
-
-    initial_dir = group_dir / "initial"
-    if not initial_dir.exists():
-        return GroupResult(group_name=group_name, schema_name=schema_name)
-
-    workspace = workspace_base / f"{group_name}-{schema_name}"
-    if workspace.exists():
-        shutil.rmtree(workspace)
-    shutil.copytree(initial_dir, workspace)
-
-    result = GroupResult(group_name=group_name, schema_name=schema_name)
-    session_path = workspace / ".bench-session.jsonl"
+    session_path: Path,
+    deadline: float,
+) -> RunResult | None:
+    """Run all steps of a group once. Returns None if timed out."""
+    run_result = RunResult(passed=True, steps=[])
 
     step_dirs = sorted(
         [d for d in group_dir.iterdir() if d.is_dir() and d.name.startswith("step-")],
@@ -194,17 +188,71 @@ def run_group(
             step_dir=step_dir,
             extension_path=extension_path,
             session_path=session_path,
-            max_retries=max_retries,
+            deadline=deadline,
         )
-        result.steps.append(step_result)
+
+        if step_result is None:
+            return None  # timeout during step → abandon this run
+
+        run_result.steps.append(step_result)
         if not step_result.passed:
+            run_result.passed = False
             break
 
-    # Parse metrics once from the final session
+    # Parse metrics from the completed session
     if session_path.exists():
         try:
-            result.metrics = parse_session(session_path)
+            run_result.metrics = parse_session(session_path)
         except Exception:
             pass
+
+    return run_result
+
+
+def run_group(
+    workspace_base: Path,
+    group_dir: Path,
+    extension_path: Path,
+    runs: int = 1,
+    timeout: int = 600,
+) -> GroupResult:
+    """Run a test group N times with one schema extension.
+
+    Each run gets its own workspace and session file. Metrics are
+    averaged across completed runs. Timed-out runs are excluded.
+    """
+    group_name = group_dir.name
+    schema_name = extension_path.parent.name
+
+    initial_dir = group_dir / "initial"
+    if not initial_dir.exists():
+        return GroupResult(group_name=group_name, schema_name=schema_name)
+
+    result = GroupResult(
+        group_name=group_name,
+        schema_name=schema_name,
+        runs_total=runs,
+    )
+
+    for run_idx in range(1, runs + 1):
+        workspace = workspace_base / f"{group_name}-{schema_name}" / f"run-{run_idx}"
+        if workspace.exists():
+            shutil.rmtree(workspace)
+        shutil.copytree(initial_dir, workspace)
+
+        session_path = workspace / ".bench-session.jsonl"
+        deadline = time.time() + timeout
+
+        run_result = run_single(
+            workspace=workspace,
+            group_dir=group_dir,
+            extension_path=extension_path,
+            session_path=session_path,
+            deadline=deadline,
+        )
+
+        if run_result is not None:
+            result.runs.append(run_result)
+            result.runs_completed += 1
 
     return result

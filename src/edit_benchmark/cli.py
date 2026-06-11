@@ -33,20 +33,26 @@ def find_test_groups(groups_dir: Path) -> list[Path]:
 def print_result(result: GroupResult, verbose: bool = False) -> None:
     """Print a single group result."""
     status = "PASS" if result.passed else "FAIL"
-    print(f"\n  [{status}] {result.group_name} ({result.schema_name})")
-    print(f"    Attempts: {result.total_attempts}")
-    print(f"    Context tokens (1x): {result.context_tokens}")
-    print(f"    Cost score: {result.cost_score}")
-    print(f"    Turns: {result.total_turns}")
-
+    runs_info = f" ({result.runs_completed}/{result.runs_total} runs)" if result.runs_total > 1 else ""
+    print(f"\n  [{status}] {result.group_name} ({result.schema_name}){runs_info}")
+    print(f"    Context tokens (avg): {result.context_tokens}")
+    print(f"    Cost score (avg):     {result.cost_score}")
+    print(f"    Turns (avg):          {result.total_turns:.1f}")
 
     if verbose:
-        for step in result.steps:
-            step_status = "PASS" if step.passed else "FAIL"
-            print(f"      {step_status} {step.step_name} ({step.attempts} attempt(s))")
-            if step.failures:
-                for failure in step.failures:
-                    print(f"        FAIL: {failure}")
+        for run in result.runs:
+            run_status = "PASS" if run.passed else "FAIL"
+            m = run.metrics
+            if m:
+                print(f"    run: {run_status} ctx={m.context_tokens} cost={m.cost_score} turns={m.turn_count}")
+            else:
+                print(f"    run: {run_status}")
+            for s in run.steps:
+                s_status = "PASS" if s.passed else "FAIL"
+                print(f"      {s_status} {s.step_name} ({s.attempts} attempt(s))")
+                if s.failures:
+                    for failure in s.failures:
+                        print(f"        FAIL: {failure}")
 
 
 def generate_json_report(
@@ -68,23 +74,30 @@ def generate_json_report(
             "group": r.group_name,
             "schema": r.schema_name,
             "passed": r.passed,
-            "attempts": r.total_attempts,
-            "context_tokens": r.context_tokens,
-            "cost_score": r.cost_score,
-            "turns": r.total_turns,
-            "metrics": r.metrics.summary() if r.metrics else None,
-            "steps": [],
+            "runs_completed": r.runs_completed,
+            "runs_total": r.runs_total,
+            "context_tokens_avg": r.context_tokens,
+            "cost_score_avg": r.cost_score,
+            "turns_avg": r.total_turns,
+            "runs": [],
         }
-        for s in r.steps:
-            step_entry = {
-                "name": s.step_name,
-                "passed": s.passed,
-                "attempts": s.attempts,
+        for run in r.runs:
+            run_entry = {
+                "passed": run.passed,
+                "metrics": run.metrics.summary() if run.metrics else None,
+                "steps": [
+                    {
+                        "name": s.step_name,
+                        "passed": s.passed,
+                        "attempts": s.attempts,
+                        "failures": s.failures,
+                    }
+                    for s in run.steps
+                ],
             }
-            if s.failures:
-                step_entry["failures"] = s.failures
-            entry["steps"].append(step_entry)
+            entry["runs"].append(run_entry)
         report["results"].append(entry)
+
     output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
 
@@ -108,10 +121,16 @@ def main() -> None:
         help="Workspace directory for benchmark runs (default: workspace/)",
     )
     parser.add_argument(
-        "--max-retries",
+        "--runs",
         type=int,
-        default=3,
-        help="Maximum retries per step on validation failure (default: 3)",
+        default=1,
+        help="Number of runs per (extension, group) for averaging (default: 1)",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=600,
+        help="Total timeout per run in seconds (default: 600)",
     )
     parser.add_argument(
         "--verbose", "-v",
@@ -146,6 +165,9 @@ def main() -> None:
     print(f"Test groups: {len(groups)}")
     for g in groups:
         print(f"  - {g.name}")
+    if args.runs > 1:
+        print(f"Runs per group: {args.runs}")
+        print(f"Timeout per run: {args.timeout}s")
     print(f"Workspace: {workspace_base}")
     print()
 
@@ -167,7 +189,8 @@ def main() -> None:
                 workspace_base=workspace_base,
                 group_dir=group_dir,
                 extension_path=ext_path,
-                max_retries=args.max_retries,
+                runs=args.runs,
+                timeout=args.timeout,
             )
             all_results.append(result)
             print_result(result, verbose=args.verbose)
