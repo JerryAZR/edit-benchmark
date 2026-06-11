@@ -43,11 +43,7 @@ def print_result(result: GroupResult, verbose: bool = False) -> None:
     if verbose:
         for step in result.steps:
             step_status = "PASS" if step.passed else "FAIL"
-            metrics_str = ""
-            if step.metrics:
-                m = step.metrics.summary()
-                metrics_str = f" | turns={m['turns']} ctx={m['context_tokens']} cost={m['cost_score']} errors={m['tool_errors']}"
-            print(f"      {step_status} {step.step_name} ({step.attempts} attempt(s)){metrics_str}")
+            print(f"      {step_status} {step.step_name} ({step.attempts} attempt(s))")
             if step.failures:
                 for failure in step.failures:
                     print(f"        FAIL: {failure}")
@@ -76,6 +72,7 @@ def generate_json_report(
             "context_tokens": r.context_tokens,
             "cost_score": r.cost_score,
             "turns": r.total_turns,
+            "metrics": r.metrics.summary() if r.metrics else None,
             "steps": [],
         }
         for s in r.steps:
@@ -84,13 +81,10 @@ def generate_json_report(
                 "passed": s.passed,
                 "attempts": s.attempts,
             }
-            if s.metrics:
-                step_entry["metrics"] = s.metrics.summary()
             if s.failures:
                 step_entry["failures"] = s.failures
             entry["steps"].append(step_entry)
         report["results"].append(entry)
-
     output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
 
