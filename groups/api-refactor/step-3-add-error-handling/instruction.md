@@ -1,0 +1,1 @@
+In src/api.py, modify `get_current_weather` to parse the response as JSON using `response.json()` and return the parsed object instead of `response.text`. Also wrap the request in a try/except that catches `requests.RequestException` and returns `None` on error.

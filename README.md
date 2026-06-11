@@ -1,0 +1,189 @@
+# edit-benchmark
+
+Benchmark suite for evaluating edit tool schemas used by LLM coding agents.
+
+Compares different edit tool interfaces across multi-step editing scenarios,
+measuring token usage, turn counts, and edit accuracy.
+
+## How it works
+
+```
+edit-benchmark (Python, outside pi)
+│
+├── For each edit schema extension:
+│   └── For each test group:
+│       ├── cp initial/ → workspace/
+│       └── For each step:
+│           ├── pi -p "instruction" -e extension --session session.jsonl
+│           ├── validate (assertion-based, lenient)
+│           └── retry on failure (up to N times)
+│
+└── Parse session JSONL → token usage, turns, tool calls
+    → summary table
+```
+
+## Project structure
+
+```
+edit-benchmark/
+├── extensions/           # Edit schema extensions (YOU provide these)
+│   ├── empty1/index.ts   # Placeholder for flow testing
+│   └── empty2/index.ts   # Placeholder for flow testing
+├── groups/               # Test scenarios
+│   └── api-refactor/
+│       ├── initial/      # Starting file state
+│       ├── step-1-*/     # instruction.md + validate.yaml
+│       ├── step-2-*/
+│       └── step-3-*/
+├── src/edit_benchmark/   # Python harness
+│   ├── cli.py            # Entry point
+│   ├── runner.py         # Orchestrator
+│   ├── session_parser.py # Parse pi session JSONL
+│   └── validator.py      # Assertion-based validation
+└── pyproject.toml
+```
+
+## Getting started
+
+### 1. Install
+
+```bash
+python -m venv .venv
+source .venv/bin/activate   # Linux/macOS
+.venv\Scripts\activate      # Windows
+pip install -e .
+```
+
+Or skip activation and use the full path: `.venv/Scripts/python` (Windows) or `.venv/bin/python` (Linux/macOS).
+
+### 2. Provide edit schema extensions
+
+The benchmark needs **real** edit schema extensions — published pi packages that shadow
+`read` and `edit` with different interfaces. Drop them in `extensions/`:
+
+```
+extensions/
+├── edit-hashline/index.ts    # LINE#HASH anchored edits
+├── edit-textreplace/index.ts # oldText/newText exact replacement
+├── edit-linenumber/index.ts  # Line-number based
+├── edit-regex/index.ts       # Regex-based
+└── edit-diff/index.ts        # Unified diff patch
+```
+
+Each extension shadows pi's built-in `read` and `edit` tools (pi supports this via
+`pi.registerTool({ name: "read", ... })`).
+
+**The empty1/empty2 placeholders are for flow testing only** — they produce meaningful
+metric shapes (tokens, turns) but don't test different edit schemas.
+
+### 3. Configure pi model
+
+Set the model in pi (via `/model` or settings) before running:
+
+- For cheap testing: `deepseek-v4-flash`
+- For real benchmarks: whatever models you're comparing
+
+### 4. Run
+
+From the project directory, inside the venv:
+
+```bash
+edit-benchmark --verbose
+```
+
+Or without activating:
+
+```bash
+.venv/Scripts/python -m edit_benchmark.cli
+```
+
+Options:
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--extensions-dir` | `extensions/` | Path to edit schema extensions |
+| `--groups-dir` | `groups/` | Path to test groups |
+| `--workspace` | `workspace/` | Working directory for runs |
+| `--max-retries` | `3` | Max retries per step on failure |
+| `--verbose`, `-v` | off | Show per-step details |
+| `--json-report` | none | Write JSON report to file |
+
+## Test group format
+
+Each test group is a directory under `groups/`:
+
+```
+groups/my-test/
+├── initial/                    # Starting files (copied to workspace)
+│   └── src/
+│       └── main.py
+├── step-1-description/
+│   ├── instruction.md          # Prompt for the agent
+│   └── validate.yaml           # Assertions to check
+├── step-2-description/
+│   ├── instruction.md
+│   └── validate.yaml
+└── step-3-description/
+    ├── instruction.md
+    └── validate.yaml
+```
+
+Steps are run sequentially in the same session. Step 2 sees step 1's edits, etc.
+If a step fails all retries, subsequent steps are skipped.
+
+## Validate file format
+
+```yaml
+# Single file mode
+file: src/main.py
+must_contain:
+  - pattern1           # Regex: must be found in file
+  - pattern2
+must_not_contain:
+  - bad-pattern        # Regex: must NOT be found in file
+
+# Multi-file mode
+files:
+  src/main.py:
+    must_contain:
+      - "def new_function"
+  src/utils.py:
+    must_not_contain:
+      - "old import"
+```
+
+Patterns are Python regex. Use single-quoted YAML strings for patterns with backslashes:
+
+```yaml
+must_contain:
+  - 'response\.json\(\)'
+```
+
+Assertions are **semantic, not byte-level** — patterns check for keywords/structures,
+not exact formatting. This tolerates LLM creativity (extra comments, reformatting, type hints).
+
+## Metrics
+
+| Metric | Source | Meaning |
+|--------|--------|---------|
+| Input tokens | Session JSONL `usage.input` | Tokens sent to LLM |
+| Output tokens | Session JSONL `usage.output` | Tokens generated by LLM |
+| Turn count | Session JSONL assistant messages | Agent turns taken |
+| Tool errors | Session JSONL `isError` | Tool-rejected edits |
+
+## Defining good scenarios
+
+Good test groups stress the differences between edit schemas:
+
+- **Multi-step edits** (3+ sequential edits in one session): stress-tests anchor staleness,
+  ambiguous matches, line shifts
+- **Ambiguous matches**: old text appears multiple times
+- **Adjacent edits**: edits on neighboring lines
+- **Large files**: tests read cost vs precision
+
+The `api-refactor/` group is a simple starting example. Add more groups to cover your
+use cases.
+
+## License
+
+MIT

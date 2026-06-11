@@ -1,0 +1,8 @@
+workspace/
+__pycache__/
+*.pyc
+.pi/
+src/*.egg-info/
+results.json
+uv.lock
+.venv/

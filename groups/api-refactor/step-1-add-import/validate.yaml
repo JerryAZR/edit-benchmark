@@ -1,0 +1,7 @@
+file: src/api.py
+must_contain:
+  - import json
+must_not_contain:
+  - |
+    import json
+    import json

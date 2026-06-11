@@ -1,0 +1,5 @@
+file: src/api.py
+must_contain:
+  - 'response\.json\(\)'
+  - RequestException
+  - except

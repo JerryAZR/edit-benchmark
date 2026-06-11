@@ -1,0 +1,6 @@
+file: src/api.py
+must_contain:
+  - "timeout=30"
+  - "timeout=timeout"
+must_not_contain:
+  - 'def get_current_weather\(city\):'
