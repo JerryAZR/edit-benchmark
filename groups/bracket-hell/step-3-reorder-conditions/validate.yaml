@@ -1,0 +1,6 @@
+file: src/bracket.py
+must_contain:
+  - 'isinstance\(value, list\)[\s\S]*isinstance\(value, str\)'
+  - 'isinstance\(value, dict\)'
+must_not_contain:
+  - 'isinstance\(value, str\)[\s\S]*isinstance\(value, list\)'

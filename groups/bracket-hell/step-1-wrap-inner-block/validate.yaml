@@ -1,0 +1,7 @@
+file: src/bracket.py
+must_contain:
+  - 'try:'
+  - 'except ValueError:'
+  - 'if sub_value > 1000:'
+  - 'abs\(sub_value\)'
+must_not_contain: []

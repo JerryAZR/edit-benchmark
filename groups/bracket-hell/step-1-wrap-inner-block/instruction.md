@@ -1,0 +1,1 @@
+Edit src/bracket.py: inside `process_config`, wrap the `if sub_value > 1000:` block (the entire if/else at level 3) in a try/except ValueError. The block is inside the `isinstance(sub_value, (int, float))` branch. Add `try:` before `if sub_value > 1000:` and `except ValueError: result[full_key] = 0` after the closing else.

@@ -1,0 +1,1 @@
+Edit src/bracket.py: in SAMPLE_CONFIG, inside the `cache` settings dict, change `"strategy": "lru"` to `"strategy": "fifo"`. This is nested inside a multi-level dict literal with many closing brackets. Do not change anything else.

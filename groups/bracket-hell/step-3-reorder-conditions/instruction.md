@@ -1,0 +1,1 @@
+Edit src/bracket.py: in `process_config`, swap the order of the `isinstance(value, str)` branch and the `isinstance(value, list)` branch. The list branch should come before the string branch. Keep the body of each branch exactly the same — just swap their positions.

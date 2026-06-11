@@ -1,0 +1,6 @@
+file: src/bracket.py
+must_contain:
+  - '"fifo"'
+  - 'SAMPLE_CONFIG'
+must_not_contain:
+  - '"lru"'
