@@ -6,3 +6,4 @@ src/*.egg-info/
 results.json
 uv.lock
 .venv/
+repro/session-*.jsonl
