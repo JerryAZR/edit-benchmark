@@ -1,0 +1,5 @@
+file: src/pipeline.py
+must_contain:
+  - 'def sort_records'
+must_not_contain:
+  - 'def deduplicate_records'

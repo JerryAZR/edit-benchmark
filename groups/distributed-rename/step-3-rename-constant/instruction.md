@@ -1,0 +1,1 @@
+Edit src/warehouse.py: rename the constant `MAX_BATCH` to `BATCH_LIMIT` everywhere it appears (definition, default parameter, references in functions). Also rename `MAX_ITEMS` to `STORAGE_CAPACITY` everywhere. Keep `normalize_item` and `InventoryHandler` unchanged.

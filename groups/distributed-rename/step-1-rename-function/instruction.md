@@ -1,0 +1,1 @@
+Edit src/warehouse.py: rename the function `process_item` to `normalize_item` everywhere it appears (function definition, all call sites, all docstring references). Do not rename any other identifiers.

@@ -7,3 +7,5 @@ results.json
 uv.lock
 .venv/
 repro/session-*.jsonl
+repro/repro.py
+repro/Say*

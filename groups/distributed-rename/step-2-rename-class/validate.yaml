@@ -1,0 +1,8 @@
+file: src/warehouse.py
+must_contain:
+  - 'class InventoryHandler'
+  - 'handled_count'
+  - 'def normalize_item'
+must_not_contain:
+  - 'ItemProcessor'
+  - 'processed_count'

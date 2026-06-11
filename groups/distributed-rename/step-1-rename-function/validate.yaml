@@ -1,0 +1,5 @@
+file: src/warehouse.py
+must_contain:
+  - 'def normalize_item'
+must_not_contain:
+  - 'process_item'

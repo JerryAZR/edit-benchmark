@@ -1,0 +1,1 @@
+Edit src/warehouse.py: rename the class `ItemProcessor` to `InventoryHandler` everywhere it appears (class definition, type hints, constructor calls, docstrings). Also rename `self.processed_count` to `self.handled_count` and the `processor` parameter in `transfer_item` to `handler`. Keep `normalize_item` unchanged.

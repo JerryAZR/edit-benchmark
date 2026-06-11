@@ -1,0 +1,1 @@
+Edit src/pipeline.py: rewrite the body of `validate_record` to use a schema-based approach. Define a module-level constant `RECORD_SCHEMA = {"id": str, "name": str, "timestamp": (int, float)}` before the function, then rewrite `validate_record` to iterate over RECORD_SCHEMA and check types. Keep the function signature (name, params, return type) unchanged.

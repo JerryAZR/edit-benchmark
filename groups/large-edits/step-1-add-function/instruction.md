@@ -1,0 +1,1 @@
+Edit src/pipeline.py: add a new `sort_records` function between `filter_records` and `deduplicate_records`. The function should take a list of records and an optional `key` parameter (default "name"), and return the records sorted alphabetically by that key. Use type hints and include a docstring.

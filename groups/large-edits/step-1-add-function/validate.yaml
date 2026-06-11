@@ -1,0 +1,4 @@
+file: src/pipeline.py
+must_contain:
+  - 'def sort_records'
+  - 'def filter_records[\s\S]*def sort_records[\s\S]*def deduplicate_records'

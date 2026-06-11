@@ -1,0 +1,9 @@
+file: src/warehouse.py
+must_contain:
+  - 'BATCH_LIMIT'
+  - 'STORAGE_CAPACITY'
+  - 'class InventoryHandler'
+  - 'def normalize_item'
+must_not_contain:
+  - 'MAX_BATCH'
+  - 'MAX_ITEMS'

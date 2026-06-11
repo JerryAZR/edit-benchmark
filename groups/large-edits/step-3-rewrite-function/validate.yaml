@@ -1,0 +1,6 @@
+file: src/pipeline.py
+must_contain:
+  - 'RECORD_SCHEMA'
+  - 'def validate_record'
+must_not_contain:
+  - 'isinstance\(record'

@@ -66,10 +66,24 @@ def run_pi(
     timeout: int = 120,
     model: str | None = None,
 ):
-    """Run pi in print mode. Returns CompletedProcess or None on timeout."""
-    pi_exe = shutil.which("pi.cmd") or shutil.which("pi") or "pi"
-    cmd = [
-        pi_exe,
+    """Run pi in print mode. Returns CompletedProcess or None on timeout.
+
+    Uses node directly (not pi.cmd) to avoid Windows cmd.exe prompt corruption
+    with multi-line prompts containing \\n\\n.
+    """
+    # Find the pi wrapper, then derive the node entry point
+    pi_cmd = shutil.which("pi.cmd") or shutil.which("pi")
+    if pi_cmd:
+        pi_dir = Path(pi_cmd).parent
+        cli_js = pi_dir / "node_modules" / "@earendil-works" / "pi-coding-agent" / "dist" / "cli.js"
+        if cli_js.exists():
+            pi_exe = str(cli_js)
+            cmd = ["node", pi_exe]
+        else:
+            cmd = [pi_cmd]
+    else:
+        cmd = ["pi"]
+    cmd += [
         "-p", prompt,
         "-e", str(extension_path),
         "--session", str(session_path),
