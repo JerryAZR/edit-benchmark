@@ -133,6 +133,11 @@ def main() -> None:
         help="Total timeout per run in seconds (default: 600)",
     )
     parser.add_argument(
+        "--model",
+        default="deepseek-v4-flash",
+        help="Model to use for pi (default: deepseek-v4-flash)",
+    )
+    parser.add_argument(
         "--verbose", "-v",
         action="store_true",
         help="Show per-step details",
@@ -191,6 +196,7 @@ def main() -> None:
                 extension_path=ext_path,
                 runs=args.runs,
                 timeout=args.timeout,
+                model=args.model,
             )
             all_results.append(result)
             print_result(result, verbose=args.verbose)

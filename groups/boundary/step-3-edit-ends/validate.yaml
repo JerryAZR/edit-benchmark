@@ -1,0 +1,7 @@
+file: src/normal.py
+must_contain:
+  - '"""Boundary editing test module\."""'
+  - 'print\(farewell\("World"\)\)'
+must_not_contain:
+  - 'boundary test module'
+  - 'print\(greet\("World"\)\)'

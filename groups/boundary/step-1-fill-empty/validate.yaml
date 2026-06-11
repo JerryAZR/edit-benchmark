@@ -1,0 +1,5 @@
+file: src/empty.py
+must_contain:
+  - 'def get_version'
+  - '(?m)^def get_version'
+  - 'return "0.1.0"'

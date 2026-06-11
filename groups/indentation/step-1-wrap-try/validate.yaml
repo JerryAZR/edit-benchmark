@@ -1,0 +1,6 @@
+file: src/layout.py
+must_contain:
+  - '(?m)^    try:'
+  - '(?m)^        if x > 0:'
+  - '(?m)^    except Exception:'
+  - '(?m)^        return -1'

@@ -1,0 +1,4 @@
+file: src/layout.py
+must_contain:
+  - '(?m)^    def remove'
+  - 'self\.items\.remove'

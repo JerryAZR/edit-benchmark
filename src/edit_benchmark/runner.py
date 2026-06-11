@@ -64,6 +64,7 @@ def run_pi(
     session_path: Path,
     cwd: Path,
     timeout: int = 120,
+    model: str | None = None,
 ):
     """Run pi in print mode. Returns CompletedProcess or None on timeout."""
     pi_exe = shutil.which("pi.cmd") or shutil.which("pi") or "pi"
@@ -73,16 +74,19 @@ def run_pi(
         "-e", str(extension_path),
         "--session", str(session_path),
     ]
+    if model:
+        cmd.extend(["--model", model])
     try:
-        return subprocess.run(
+        # Redirect stdout+stderr to devnull so pi writes session synchronously
+        # (capture_output=True causes async session writes to be lost on fast exits)
+        result = subprocess.run(
             cmd,
             cwd=str(cwd),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
             timeout=timeout,
         )
+        return result
     except subprocess.TimeoutExpired:
         return None
 
@@ -93,6 +97,7 @@ def run_step(
     extension_path: Path,
     session_path: Path,
     deadline: float,
+    model: str | None = None,
 ) -> StepResult | None:
     """Run a single edit step, retrying until pass or deadline expires.
 
@@ -137,6 +142,7 @@ def run_step(
             session_path=session_path,
             cwd=workspace,
             timeout=max(1, int(remaining)),
+            model=model,
         )
 
         if process is None:
@@ -173,6 +179,7 @@ def run_single(
     extension_path: Path,
     session_path: Path,
     deadline: float,
+    model: str | None = None,
 ) -> RunResult | None:
     """Run all steps of a group once. Returns None if timed out."""
     run_result = RunResult(passed=True, steps=[])
@@ -189,6 +196,7 @@ def run_single(
             extension_path=extension_path,
             session_path=session_path,
             deadline=deadline,
+            model=model,
         )
 
         if step_result is None:
@@ -215,6 +223,7 @@ def run_group(
     extension_path: Path,
     runs: int = 1,
     timeout: int = 600,
+    model: str | None = None,
 ) -> GroupResult:
     """Run a test group N times with one schema extension.
 
@@ -249,6 +258,7 @@ def run_group(
             extension_path=extension_path,
             session_path=session_path,
             deadline=deadline,
+            model=model,
         )
 
         if run_result is not None:

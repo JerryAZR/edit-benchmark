@@ -1,0 +1,5 @@
+file: src/single.py
+must_contain:
+  - '2\.0\.0-beta1'
+must_not_contain:
+  - '1\.0\.0'

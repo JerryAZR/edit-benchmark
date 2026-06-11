@@ -1,0 +1,5 @@
+file: src/patterns.py
+must_contain:
+  - 'URL_PATTERN'
+must_not_contain:
+  - 'URL_RE'

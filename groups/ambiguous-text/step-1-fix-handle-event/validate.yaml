@@ -1,0 +1,8 @@
+file: src/handlers.py
+must_contain:
+  - '\[EVENT\] received:'
+must_not_contain:
+  - '\[EVENT\] received:.*handle_request'
+  - '\[EVENT\] received:.*handle_response'
+  - '\[EVENT\] received:.*handle_notification'
+  - '\[EVENT\] received:.*handle_alert'

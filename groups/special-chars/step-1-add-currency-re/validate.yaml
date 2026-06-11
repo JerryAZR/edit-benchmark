@@ -1,0 +1,4 @@
+file: src/patterns.py
+must_contain:
+  - 'CURRENCY_RE'
+  - '\\d\{2\}'

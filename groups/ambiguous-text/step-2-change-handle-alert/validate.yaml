@@ -1,0 +1,8 @@
+file: src/handlers.py
+must_contain:
+  - 'send_alert_pager\(data\)'
+must_not_contain:
+  - 'send_alert_pager\(data\).*handle_request'
+  - 'send_alert_pager\(data\).*handle_response'
+  - 'send_alert_pager\(data\).*handle_event'
+  - 'send_alert_pager\(data\).*handle_notification'

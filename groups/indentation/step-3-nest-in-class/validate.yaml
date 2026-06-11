@@ -1,0 +1,6 @@
+file: src/layout.py
+must_contain:
+  - '(?m)^class Wrapper:'
+  - '(?m)^    def outer'
+  - '(?m)^        try:'
+  - '(?m)^            if x > 0:'

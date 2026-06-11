@@ -1,0 +1,3 @@
+file: src/patterns.py
+must_not_contain:
+  - 'SQL_COMMENT'
