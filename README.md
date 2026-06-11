@@ -3,7 +3,7 @@
 Benchmark suite for evaluating edit tool schemas used by LLM coding agents.
 
 Compares different edit tool interfaces across multi-step editing scenarios,
-measuring token usage, turn counts, and edit accuracy.
+measuring token usage, cost, turn counts, and edit accuracy.
 
 ## How it works
 
@@ -12,14 +12,16 @@ edit-benchmark (Python, outside pi)
 │
 ├── For each edit schema extension:
 │   └── For each test group:
-│       ├── cp initial/ → workspace/
-│       └── For each step:
-│           ├── pi -p "instruction" -e extension --session session.jsonl
-│           ├── validate (assertion-based, lenient)
-│           └── retry on failure (up to N times)
+│       ├── Run N times (--runs), each in an isolated workspace
+│       │   ├── cp initial/ → workspace/{group}-{schema}/run-{N}/
+│       │   └── For each step:
+│       │       ├── node cli.js -p "instruction" -e extension --session session.jsonl
+│       │       ├── validate (assertion-based, lenient)
+│       │       └── retry on failure (until timeout)
+│       │
+│       └── Parse per-run session JSONL → token usage, turns, tool calls
 │
-└── Parse session JSONL → token usage, turns, tool calls
-    → summary table
+└── Average across runs → summary table
 ```
 
 ## Project structure
@@ -29,17 +31,20 @@ edit-benchmark/
 ├── extensions/           # Edit schema extensions (YOU provide these)
 │   ├── empty1/index.ts   # Placeholder for flow testing
 │   └── empty2/index.ts   # Placeholder for flow testing
-├── groups/               # Test scenarios
-│   └── api-refactor/
-│       ├── initial/      # Starting file state
-│       ├── step-1-*/     # instruction.md + validate.yaml
-│       ├── step-2-*/
-│       └── step-3-*/
+├── groups/               # Test scenarios (7 groups)
+│   ├── api-refactor/     # Small multi-step edits (smoke test)
+│   ├── ambiguous-text/   # 5 identical-looking functions
+│   ├── boundary/         # Empty file, single-line, EOF edits
+│   ├── indentation/      # Nest/un-nest Python blocks
+│   ├── special-chars/    # Source with regex metacharacters
+│   ├── large-edits/      # Add/delete/rewrite large blocks
+│   └── distributed-rename/ # Rename identifiers (8-11 occurrences)
 ├── src/edit_benchmark/   # Python harness
 │   ├── cli.py            # Entry point
 │   ├── runner.py         # Orchestrator
 │   ├── session_parser.py # Parse pi session JSONL
 │   └── validator.py      # Assertion-based validation
+├── repro/                # Bug reproduction (Windows pi.cmd wrapper)
 └── pyproject.toml
 ```
 
@@ -53,8 +58,6 @@ source .venv/bin/activate   # Linux/macOS
 .venv\Scripts\activate      # Windows
 pip install -e .
 ```
-
-Or skip activation and use the full path: `.venv/Scripts/python` (Windows) or `.venv/bin/python` (Linux/macOS).
 
 ### 2. Provide edit schema extensions
 
@@ -76,36 +79,29 @@ Each extension shadows pi's built-in `read` and `edit` tools (pi supports this v
 **The empty1/empty2 placeholders are for flow testing only** — they produce meaningful
 metric shapes (tokens, turns) but don't test different edit schemas.
 
-### 3. Configure pi model
-
-Set the model in pi (via `/model` or settings) before running:
-
-- For cheap testing: `deepseek-v4-flash`
-- For real benchmarks: whatever models you're comparing
-
-### 4. Run
-
-From the project directory, inside the venv:
+### 3. Run
 
 ```bash
-edit-benchmark --verbose
+edit-benchmark --model deepseek-v4-flash --verbose
 ```
 
 Or without activating:
 
 ```bash
-.venv/Scripts/python -m edit_benchmark.cli
+.venv/Scripts/python -m edit_benchmark.cli --model deepseek-v4-flash
 ```
 
-Options:
+### Options
 
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--extensions-dir` | `extensions/` | Path to edit schema extensions |
 | `--groups-dir` | `groups/` | Path to test groups |
 | `--workspace` | `workspace/` | Working directory for runs |
-| `--max-retries` | `3` | Max retries per step on failure |
-| `--verbose`, `-v` | off | Show per-step details |
+| `--model` | `deepseek-v4-flash` | Model passed to pi |
+| `--runs` | `1` | Runs per (schema, group) for averaging |
+| `--timeout` | `600` | Total timeout per run in seconds |
+| `--verbose`, `-v` | off | Show per-step and per-run details |
 | `--json-report` | none | Write JSON report to file |
 
 ## Test group format
@@ -128,10 +124,11 @@ groups/my-test/
     └── validate.yaml
 ```
 
-Steps are run sequentially in the same session. Step 2 sees step 1's edits, etc.
-If a step fails all retries, subsequent steps are skipped.
+Steps run sequentially in the **same session** (and workspace). Step 2 sees step 1's
+edits. If a step times out, the entire run is discarded. If a step fails validation,
+it retries with the error message as feedback — until it passes or the run times out.
 
-## Validate file format
+### validate.yaml format
 
 ```yaml
 # Single file mode
@@ -152,37 +149,43 @@ files:
       - "old import"
 ```
 
-Patterns are Python regex. Use single-quoted YAML strings for patterns with backslashes:
+Patterns are Python regex. Use single-quoted YAML strings for metacharacters:
 
 ```yaml
 must_contain:
   - 'response\.json\(\)'
+  - '(?m)^    def outer'    # Anchored to line start
 ```
 
 Assertions are **semantic, not byte-level** — patterns check for keywords/structures,
-not exact formatting. This tolerates LLM creativity (extra comments, reformatting, type hints).
+not exact formatting. This tolerates LLM creativity (extra comments, reformatting, etc.).
 
-## Metrics
+### Metrics
 
 | Metric | Source | Meaning |
 |--------|--------|---------|
-| Input tokens | Session JSONL `usage.input` | Tokens sent to LLM |
-| Output tokens | Session JSONL `usage.output` | Tokens generated by LLM |
-| Turn count | Session JSONL assistant messages | Agent turns taken |
-| Tool errors | Session JSONL `isError` | Tool-rejected edits |
+| **Context tokens** | Last turn's `cacheRead + input + output` | Total unique tokens in conversation (once-counted) |
+| **Cost score** | Σ(cacheRead×1 + input×10 + output×40) | Weighted cost (lower = cheaper) |
+| **Turns** | Assistant message count | Agent reasoning + tool call rounds |
+| **Tool errors** | `isError` flags in session | Rejected or failed edits |
 
-## Defining good scenarios
+## Test coverage
 
-Good test groups stress the differences between edit schemas:
-
-- **Multi-step edits** (3+ sequential edits in one session): stress-tests anchor staleness,
-  ambiguous matches, line shifts
-- **Ambiguous matches**: old text appears multiple times
-- **Adjacent edits**: edits on neighboring lines
-- **Large files**: tests read cost vs precision
-
-The `api-refactor/` group is a simple starting example. Add more groups to cover your
-use cases.
+| Pattern | Group | What |
+|---------|-------|------|
+| Small addition | api-refactor, boundary, ambiguous-text | 1-3 line insertions |
+| Small deletion | special-chars | Remove single line |
+| Small replacement | boundary | Change version string |
+| Large addition (15+ lines) | large-edits | New function between existing ones |
+| Large deletion | large-edits | Delete entire 20-line function |
+| Large rewrite | large-edits | Replace function body completely |
+| Distributed rename (10+ occurrences) | distributed-rename | Function, class, constants |
+| Re-indentation / nesting | indentation | Nested try/except, class wrapping |
+| Empty file edit | boundary | Write into 0-byte file |
+| EOF edit | boundary | Change last line |
+| Ambiguous matches | ambiguous-text | 5 identical-looking functions |
+| Regex metacharacters in source | special-chars | Patterns with `.*?+[]()` etc. |
+| Non-contiguous edits | boundary | First + last line simultaneously |
 
 ## License
 
