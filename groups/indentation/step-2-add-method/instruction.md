@@ -1,12 +1,1 @@
-Edit src/layout.py: add a `remove()` method to the `Container` class.
-
-Add this method after `add()` at the same indentation level:
-
-```python
-    def remove(self, item):
-        if item in self.items:
-            self.items.remove(item)
-        return len(self.items)
-```
-
-Do not change any existing methods.
+Edit src/layout.py: add a `remove(self, item)` method to the `Container` class after the `add` method, at the same indentation level. The method should check `if item in self.items:` then call `self.items.remove(item)`, and return `len(self.items)`. Do not change any existing methods.

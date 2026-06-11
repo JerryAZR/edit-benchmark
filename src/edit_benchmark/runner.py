@@ -77,11 +77,12 @@ def run_pi(
     if model:
         cmd.extend(["--model", model])
     try:
-        # Redirect stdout+stderr to devnull so pi writes session synchronously
-        # (capture_output=True causes async session writes to be lost on fast exits)
+        # Redirect all stdio so pi writes session synchronously
+        # (capture_output=True or inheriting stdin causes write races)
         result = subprocess.run(
             cmd,
             cwd=str(cwd),
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             timeout=timeout,

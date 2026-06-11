@@ -1,6 +1,1 @@
-Edit src/handlers.py: add type hints to all functions.
-
-- All handler functions take `data: str` and return `str`
-- The `process` function takes `data: str` and returns `str`
-
-Add the type hints to the function signatures.
+Edit src/handlers.py: add type hints to all function signatures. Use `data: str` and return type `-> str` for every function (handle_request, handle_response, handle_event, handle_notification, handle_alert, process).
