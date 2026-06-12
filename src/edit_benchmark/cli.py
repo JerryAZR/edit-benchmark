@@ -3,6 +3,9 @@
 import argparse
 import json
 import sys
+import threading
+import time
+from contextlib import contextmanager
 from pathlib import Path
 
 from .runner import run_group, GroupResult
@@ -106,6 +109,30 @@ def generate_json_report(
     output_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
 
 
+
+@contextmanager
+def _spinner(label: str):
+    """Show a spinning indicator in the terminal while yielding."""
+    done = threading.Event()
+    chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+    i = [0]
+    def spin():
+        while not done.is_set():
+            sys.stderr.write(f"\r{chars[i[0] % len(chars)]} {label}  ")
+            sys.stderr.flush()
+            i[0] += 1
+            time.sleep(0.08)
+    t = threading.Thread(target=spin, daemon=True)
+    t.start()
+    try:
+        yield
+    finally:
+        done.set()
+        t.join(timeout=0.5)
+        sys.stderr.write(f"\r{' ' * 80}\r")
+        sys.stderr.flush()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Benchmark LLM coding agent edit tool schemas",
@@ -197,17 +224,18 @@ def main() -> None:
 
         for group_dir in groups:
             current += 1
-            label = f"[{current}/{total}]"
-            print(f"{label} Running {group_dir.name} with {schema_name}...", end="", flush=True)
+            label = f"[{current}/{total}] {group_dir.name} x {schema_name}"
 
-            result = run_group(
-                workspace_base=workspace_base,
-                group_dir=group_dir,
-                extension_path=ext_path,
-                runs=args.runs,
-                timeout=args.timeout,
-                model=args.model,
-            )
+            with _spinner(label):
+                result = run_group(
+                    workspace_base=workspace_base,
+                    group_dir=group_dir,
+                    extension_path=ext_path,
+                    runs=args.runs,
+                    timeout=args.timeout,
+                    model=args.model,
+                )
+
             all_results.append(result)
 
             # Review session if requested
